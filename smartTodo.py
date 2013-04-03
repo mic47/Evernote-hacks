@@ -9,7 +9,7 @@ from evernote.edam.type.ttypes import Notebook, Note
 import evernote.edam.notestore.ttypes as NodeTypes
 
 
-dev_token = tokens.sandbox_token
+dev_token = tokens.developer_token
 
 content_prefix = """<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE en-note SYSTEM "http://xml.evernote.com/pub/enml2.dtd">
@@ -61,7 +61,7 @@ def get_section(root):
         return None
     if is_new_checklist(root):
         return None
-    if not contain_node(root ,'strong'):
+    if not contain_node(root ,'strong') and not contain_node(root, 'b'):
         return None
     return sections_dict[text]
 
@@ -101,25 +101,60 @@ def split_into_sections(root):
     sections['completed'] = list()
     #We parse only toplevel node, treat them like one stuff
     section = 'start'
-    for child in root:
+    for child in split_children_by_line_breaks(root):
         newsec = get_section(child)
         if newsec != None:
             section = newsec
         if section == 'end':
-            for ul in get_tags(child, 'ul'):
-                for li in ul:
-                    kv = get_string_from_xml_tree(li).strip().split(':', 1)
-                    kv = tuple([k.strip() for k in kv])
-                    if len(kv) != 2: 
-                        continue
-                    key, value = kv
-                    sections['settings'][key] = value
+            for li in get_tags(child, 'li'):
+                kv = get_string_from_xml_tree(li).strip().split(':', 1)
+                kv = tuple([k.strip() for k in kv])
+                if len(kv) != 2: 
+                    continue
+                key, value = kv
+                sections['settings'][key] = value
         sections[section].append(child)
     for sec in ['today', 'later']:
         sections[sec], completed = split_to_tasks(sections[sec])
         sections['completed'].extend(completed)
     return sections
 
+def split_children_by_line_breaks(root):
+    for child in root:
+        if not contain_node(child, 'br'):
+            yield child
+            continue
+        stack = []
+        stack.append(child)
+        emit = []
+        n = ElementTree.Element(child.tag, child.attrib)
+        n.text = child.text
+        emit.append(n)
+        def boo():
+            for ch in stack[-1]:
+                if ch.tag == 'br':
+                    emit[-1].append(ch)
+                    yield emit[0]
+                    for i in range(len(emit)):
+                        emit[i] = ElementTree.Element(stack[i].tag, stack[i].attrib)
+                    for i in range(1, len(emit)):
+                        emit[i - 1].append(emit[i])
+                    continue
+                stack.append(ch)
+                n = ElementTree.Element(ch.tag, ch.attrib)
+                n.text = ch.text
+                emit[-1].append(n)
+                emit.append(n)
+                for x in boo():
+                    yield x
+            emit[-1].tail = stack[-1].tail
+            if len(emit) == 1:
+                yield emit[0]
+            emit.pop()
+            stack.pop()
+        for x in boo():
+            yield x
+        
 
 def parse_date(date, date_format):
     dt = dict(zip(date_format, map(int,re.findall('\d+', date))))
@@ -223,7 +258,7 @@ def get_history_note_title(prefix, date, tp, date_format, separator):
     return None
 
 
-client = EvernoteClient(token=dev_token)
+client = EvernoteClient(token=dev_token, sandbox=False)
 noteStore = client.get_note_store()
 noteStore = client.get_note_store()
 Filter=NodeTypes.NoteFilter()
@@ -232,6 +267,7 @@ notes = noteStore.findNotes(dev_token, Filter, 0, 10)
 for note in notes.notes:
     nt = noteStore.getNote(dev_token, note.guid, True, False, False, False)
     root = ElementTree.fromstring(nt.content)
+    ElementTree.dump(root)
     sections = split_into_sections(root)
     today = datetime.date.today() - datetime.timedelta(1)
     tomorrow = today + datetime.timedelta(1)
@@ -261,6 +297,8 @@ for note in notes.notes:
                 root.append(section)
     new_node_content = ElementTree.tostring(root, 'utf-8')
     nt.content = content_prefix + new_node_content
+    print 'Updated:'
+    ElementTree.dump(root)
     noteStore.updateNote(dev_token, nt)
     
     history_notebook = sections['settings']['History notebook'].strip()
@@ -305,5 +343,5 @@ for note in notes.notes:
         noteStore.createNote(dev_token, hist_note)
     else:
         noteStore.updateNote(dev_token, hist_note)
-    
+    #TODO: Budu sa mi tu kotit prazdne divy 
     #TODO: ak nastane nejaka chyba, updatni to a na konci povedz ze bola chyba
