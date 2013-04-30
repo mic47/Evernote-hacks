@@ -101,7 +101,7 @@ def split_into_sections(root):
     sections['completed'] = list()
     #We parse only toplevel node, treat them like one stuff
     section = 'start'
-    for child in split_children_by_line_breaks(root):
+    for child in remove_stupid_divs(split_children_by_line_breaks(root)):
         newsec = get_section(child)
         if newsec != None:
             section = newsec
@@ -118,6 +118,36 @@ def split_into_sections(root):
         sections[sec], completed = split_to_tasks(sections[sec])
         sections['completed'].extend(completed)
     return sections
+
+
+def same_childs_of_this_type(root, tag):
+    for child in root:
+        if child.tag != tag:
+            return False
+    return True
+
+
+def empty_text(a):
+    if a == None:
+        return True
+    if len(a.strip()) == 0:
+        return True
+    return False
+
+
+def remove_stupid_divs(lst):
+    for part in lst:
+        if (part.tag != 'div' or 
+            not same_childs_of_this_type(part, 'div') or 
+            len(part.attrib) > 0 or
+            not empty_text(part.text) or
+            not empty_text(part.tail)):
+            yield part
+        else:
+            for child in part:
+                for x in remove_stupid_divs(child):
+                    yield x
+
 
 def split_children_by_line_breaks(root):
     for child in root:
@@ -276,6 +306,7 @@ for note in notes.notes:
         'tomorrow': tomorrow,
         'yesterday': today - datetime.timedelta(1),
     }
+    print sections
     unfinished = parse_out_due_dates(sections['today'][1:], today, conversions,
                                      sections['settings']['Date format'])
     unfinished.extend(
