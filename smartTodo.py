@@ -8,7 +8,7 @@ from evernote.api.client import EvernoteClient
 from evernote.edam.type.ttypes import Notebook, Note
 import evernote.edam.notestore.ttypes as NodeTypes
 
-
+# Put you developer token here!
 dev_token = tokens.developer_token
 
 content_prefix = """<?xml version="1.0" encoding="UTF-8"?>
@@ -17,13 +17,15 @@ content_prefix = """<?xml version="1.0" encoding="UTF-8"?>
 
 sections_dict = {'Today:':'today', 'Later:':'later', 'Settings:': 'end',}
 
+
 def uni(s):
     if s == None:
         return unicode('')
     return unicode(s)
 
+
 def get_string_from_xml_tree(root):
-    return (uni(root.text) + 
+    return (uni(root.text) +
             ''.join([get_string_from_xml_tree(child) for child in root]) +
             uni(root.tail))
 
@@ -52,11 +54,11 @@ def is_completed(root):
         if is_completed(child):
             return True
     return False
-    
-    
+
+
 def get_section(root):
     text = get_string_from_xml_tree(root)
-    text = text.strip() 
+    text = text.strip()
     if text not in sections_dict:
         return None
     if is_new_checklist(root):
@@ -76,11 +78,11 @@ def split_to_tasks(L):
                 out[completed].append(nodes)
             nodes = list()
             completed = is_completed(node)
-        nodes.append(node) 
+        nodes.append(node)
     if len(nodes) > 0:
         out[completed].append(nodes)
     return out
-    
+
 
 def get_tags(root, tag):
     ret = []
@@ -90,7 +92,7 @@ def get_tags(root, tag):
         ret.extend(get_tags(child, tag))
     return ret
 
-    
+
 def split_into_sections(root):
     sections = dict()
     sections['start'] = list()
@@ -99,9 +101,9 @@ def split_into_sections(root):
     sections['later'] = list()
     sections['settings'] = dict()
     sections['completed'] = list()
-    #We parse only toplevel node, treat them like one stuff
+
     section = 'start'
-    for child in remove_stupid_divs(split_children_by_line_breaks(root)):
+    for child in remote_empty_divs(split_children_by_line_breaks(root)):
         newsec = get_section(child)
         if newsec != None:
             section = newsec
@@ -109,7 +111,7 @@ def split_into_sections(root):
             for li in get_tags(child, 'li'):
                 kv = get_string_from_xml_tree(li).strip().split(':', 1)
                 kv = tuple([k.strip() for k in kv])
-                if len(kv) != 2: 
+                if len(kv) != 2:
                     continue
                 key, value = kv
                 sections['settings'][key] = value
@@ -135,17 +137,17 @@ def empty_text(a):
     return False
 
 
-def remove_stupid_divs(lst):
+def remote_empty_divs(lst):
     for part in lst:
-        if (part.tag != 'div' or 
-            not same_childs_of_this_type(part, 'div') or 
+        if (part.tag != 'div' or
+            not same_childs_of_this_type(part, 'div') or
             len(part.attrib) > 0 or
             not empty_text(part.text) or
             not empty_text(part.tail)):
             yield part
         else:
             for child in part:
-                for x in remove_stupid_divs(child):
+                for x in remote_empty_divs(child):
                     yield x
 
 
@@ -184,7 +186,7 @@ def split_children_by_line_breaks(root):
             stack.pop()
         for x in boo():
             yield x
-        
+
 
 def parse_date(date, date_format):
     dt = dict(zip(date_format, map(int,re.findall('\d+', date))))
@@ -211,8 +213,9 @@ def parse_out_due_dates(tasks, default, conversions, date_format):
             if new_date != None:
                 due_date = new_date
         out.append((due_date, task))
-    return out 
-            
+    return out
+
+
 def replace_first_string_in_xml(pattern, replacement, root):
     if root.text != None:
         if pattern.search(root.text) != None:
@@ -226,7 +229,8 @@ def replace_first_string_in_xml(pattern, replacement, root):
             root.tail = pattern.sub(replacement, root.tail)
             return True
     return False
-            
+
+
 def update_tasks(tasks, date_format, separator):
     pattern = re.compile('@due:([^][ \t\n(){}]+)')
     output = list()
@@ -248,7 +252,6 @@ def update_tasks(tasks, date_format, separator):
             else:
                 if task[0].text == None:
                     task[0].text = ''
-                    
                 task[0].text += ' ' + replacement + ' '
         output.append(task)
     return output
@@ -263,8 +266,8 @@ def get_history_note_title(prefix, date, tp, date_format, separator):
     if tp not in ['daily', 'weekly', 'monthly']:
         tp = 'weekly'
     if tp == 'daily':
-        return '{} ({})'.format(prefix, date_to_string(date, 
-                                                       date_format, 
+        return '{} ({})'.format(prefix, date_to_string(date,
+                                                       date_format,
                                                        separator))
     if tp == 'weekly':
         monday = date - datetime.timedelta(date.weekday())
@@ -276,9 +279,9 @@ def get_history_note_title(prefix, date, tp, date_format, separator):
         )
     if tp == 'monthly':
         first_day = date - datetime.timedelta(date.day - 1)
-        last_day = (date + 
-                    datetime.timedelta(calendar.monthrange(date.year, 
-                                                           date.month)[1] - 
+        last_day = (date +
+                    datetime.timedelta(calendar.monthrange(date.year,
+                                                           date.month)[1] -
                                        date.day))
         return '{} ({} - {})'.format(
             prefix,
@@ -288,93 +291,98 @@ def get_history_note_title(prefix, date, tp, date_format, separator):
     return None
 
 
-client = EvernoteClient(token=dev_token, sandbox=False)
-noteStore = client.get_note_store()
-noteStore = client.get_note_store()
-Filter=NodeTypes.NoteFilter()
-Filter.words = 'tag:@smarttodo'
-notes = noteStore.findNotes(dev_token, Filter, 0, 10)
-for note in notes.notes:
-    nt = noteStore.getNote(dev_token, note.guid, True, False, False, False)
-    root = ElementTree.fromstring(nt.content)
-    ElementTree.dump(root)
-    sections = split_into_sections(root)
-    today = datetime.date.today() - datetime.timedelta(1)
-    tomorrow = today + datetime.timedelta(1)
-    conversions = {
-        'today': today,
-        'tomorrow': tomorrow,
-        'yesterday': today - datetime.timedelta(1),
-    }
-    print sections
-    unfinished = parse_out_due_dates(sections['today'][1:], today, conversions,
-                                     sections['settings']['Date format'])
-    unfinished.extend(
-        parse_out_due_dates(sections['later'][1:], tomorrow, conversions,
-                            sections['settings']['Date format']))
-    new_today_list = [x for x in unfinished if x[0] <= tomorrow]
-    new_tomorrow_list = [x for x in unfinished if x[0] > tomorrow]
-    new_tomorrow_list.sort(key=lambda x: x[0])
-    sections['today'][1:] = update_tasks(new_today_list, sections['settings']['Date format'], sections['settings']['Date separator'])
-    sections['later'][1:] = update_tasks(new_tomorrow_list, sections['settings']['Date format'], sections['settings']['Date separator'])
-    text, tail, attrib, tag = root.text, root.tail, root.attrib, root.tag
-    root.clear()
-    root.text, root.tail, root.attrib, root.tag = text, tail, attrib, tag
-    for sec in ['start', 'today', 'later', 'end']:
-        for section in sections[sec]:
-            if sec in ['today', 'later']:
-                root.extend(section)
-            else:
-                root.append(section)
-    while len(root) > 0 and root[-1].tag == 'br':
-        root.remove(root[-1])
-    new_node_content = ElementTree.tostring(root, 'utf-8')
-    nt.content = content_prefix + new_node_content
-    print 'Updated:'
-    ElementTree.dump(root)
-    noteStore.updateNote(dev_token, nt)
+def main():
+    client = EvernoteClient(token=dev_token, sandbox=False)
+    noteStore = client.get_note_store()
+    noteStore = client.get_note_store()
+    Filter=NodeTypes.NoteFilter()
+    Filter.words = 'tag:@smarttodo'
+    notes = noteStore.findNotes(dev_token, Filter, 0, 10)
+    for note in notes.notes:
+        nt = noteStore.getNote(dev_token, note.guid, True, False, False, False)
+        root = ElementTree.fromstring(nt.content)
+        ElementTree.dump(root)
+        sections = split_into_sections(root)
+        today = datetime.date.today() - datetime.timedelta(1)
+        tomorrow = today + datetime.timedelta(1)
+        conversions = {
+            'today': today,
+            'tomorrow': tomorrow,
+            'yesterday': today - datetime.timedelta(1),
+        }
+        print sections
+        unfinished = parse_out_due_dates(sections['today'][1:], today, conversions,
+                                         sections['settings']['Date format'])
+        unfinished.extend(
+            parse_out_due_dates(sections['later'][1:], tomorrow, conversions,
+                                sections['settings']['Date format']))
+        new_today_list = [x for x in unfinished if x[0] <= tomorrow]
+        new_tomorrow_list = [x for x in unfinished if x[0] > tomorrow]
+        new_tomorrow_list.sort(key=lambda x: x[0])
+        sections['today'][1:] = update_tasks(new_today_list, sections['settings']['Date format'], sections['settings']['Date separator'])
+        sections['later'][1:] = update_tasks(new_tomorrow_list, sections['settings']['Date format'], sections['settings']['Date separator'])
+        text, tail, attrib, tag = root.text, root.tail, root.attrib, root.tag
+        root.clear()
+        root.text, root.tail, root.attrib, root.tag = text, tail, attrib, tag
+        for sec in ['start', 'today', 'later', 'end']:
+            for section in sections[sec]:
+                if sec in ['today', 'later']:
+                    root.extend(section)
+                else:
+                    root.append(section)
+        while len(root) > 0 and root[-1].tag == 'br':
+            root.remove(root[-1])
+        new_node_content = ElementTree.tostring(root, 'utf-8')
+        nt.content = content_prefix + new_node_content
+        print 'Updated:'
+        ElementTree.dump(root)
+        noteStore.updateNote(dev_token, nt)
 
-    if len(sections['completed']) <= 0: 
-        continue
-    history_notebook = sections['settings']['History notebook'].strip()
-    history_interval = sections['settings']['History interval'].strip()
-    history_prefix = sections['settings']['History note'].strip()    
-    history_title = get_history_note_title(history_prefix, today, 
-                                           history_interval, 
-                                           sections['settings']['Date format'], 
-                                           sections['settings']['Date separator'])
-    notebooks = noteStore.listNotebooks(dev_token)
-    notebook_guid = None
-    for notebook in notebooks:
-        if notebook.name == history_notebook:
+        if len(sections['completed']) <= 0:
+            continue
+        history_notebook = sections['settings']['History notebook'].strip()
+        history_interval = sections['settings']['History interval'].strip()
+        history_prefix = sections['settings']['History note'].strip()
+        history_title = get_history_note_title(history_prefix, today,
+                                               history_interval,
+                                               sections['settings']['Date format'],
+                                               sections['settings']['Date separator'])
+        notebooks = noteStore.listNotebooks(dev_token)
+        notebook_guid = None
+        for notebook in notebooks:
+            if notebook.name == history_notebook:
+                notebook_guid = notebook.guid
+        if notebook_guid == None:
+            notebook = Notebook()
+            notebook.name = history_notebook
+            notebook = noteStore.createNotebook(dev_token, notebook)
             notebook_guid = notebook.guid
-    if notebook_guid == None:
-        notebook = Notebook()
-        notebook.name = history_notebook
-        notebook = noteStore.createNotebook(dev_token, notebook)
-        notebook_guid = notebook.guid
-    Filter = NodeTypes.NoteFilter()
-    Filter.notebookGuid = notebook_guid
-    Filter.words = 'intitle:' + history_title
-    history_notes = noteStore.findNotes(dev_token, Filter, 0, 1)
-    if len(history_notes.notes) < 1:
-        hist_root = ElementTree.Element('en-note')
-        hist_note = Note()
-        hist_note.title = history_title
-        hist_note.notebookGuid = notebook_guid
-    else:
-        hist_note = noteStore.getNote(dev_token, history_notes.notes[0].guid, 
-                                      True, False, False, False)
-        hist_root = ElementTree.fromstring(hist_note.content)
-    day_element = ElementTree.fromstring('<div><strong>{}</strong></div>'.format(
-        date_to_string(today,
-                       sections['settings']['Date format'], 
-                       sections['settings']['Date separator'])))
-    hist_root.append(day_element)
-    for x in sections['completed']:
-        hist_root.extend(x)
-    hist_note.content = content_prefix + ElementTree.tostring(hist_root, 'utf-8')
-    if len(history_notes.notes) < 1:
-        noteStore.createNote(dev_token, hist_note)
-    else:
-        noteStore.updateNote(dev_token, hist_note)
+        Filter = NodeTypes.NoteFilter()
+        Filter.notebookGuid = notebook_guid
+        Filter.words = 'intitle:' + history_title
+        history_notes = noteStore.findNotes(dev_token, Filter, 0, 1)
+        if len(history_notes.notes) < 1:
+            hist_root = ElementTree.Element('en-note')
+            hist_note = Note()
+            hist_note.title = history_title
+            hist_note.notebookGuid = notebook_guid
+        else:
+            hist_note = noteStore.getNote(dev_token, history_notes.notes[0].guid,
+                                          True, False, False, False)
+            hist_root = ElementTree.fromstring(hist_note.content)
+        day_element = ElementTree.fromstring('<div><strong>{}</strong></div>'.format(
+            date_to_string(today,
+                           sections['settings']['Date format'],
+                           sections['settings']['Date separator'])))
+        hist_root.append(day_element)
+        for x in sections['completed']:
+            hist_root.extend(x)
+        hist_note.content = content_prefix + ElementTree.tostring(hist_root, 'utf-8')
+        if len(history_notes.notes) < 1:
+            noteStore.createNote(dev_token, hist_note)
+        else:
+            noteStore.updateNote(dev_token, hist_note)
+
+
+if __name__ == '__main__':
+    main()
