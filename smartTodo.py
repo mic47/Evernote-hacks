@@ -326,12 +326,16 @@ for note in notes.notes:
                 root.extend(section)
             else:
                 root.append(section)
+    while len(root) > 0 and root[-1].tag == 'br':
+        root.remove(root[-1])
     new_node_content = ElementTree.tostring(root, 'utf-8')
     nt.content = content_prefix + new_node_content
     print 'Updated:'
     ElementTree.dump(root)
     noteStore.updateNote(dev_token, nt)
-    
+
+    if len(sections['completed']) <= 0: 
+        continue
     history_notebook = sections['settings']['History notebook'].strip()
     history_interval = sections['settings']['History interval'].strip()
     history_prefix = sections['settings']['History note'].strip()    
@@ -374,5 +378,3 @@ for note in notes.notes:
         noteStore.createNote(dev_token, hist_note)
     else:
         noteStore.updateNote(dev_token, hist_note)
-    #TODO: Budu sa mi tu kotit prazdne divy 
-    #TODO: ak nastane nejaka chyba, updatni to a na konci povedz ze bola chyba
